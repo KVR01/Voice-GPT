@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voice-to-Gemini Answer Assistant</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f9fafb;
+      margin: 0;
+      padding: 2rem;
+      text-align: center;
+    }
+    textarea, button, input {
+      margin-top: 1rem;
+      width: 90%;
+      max-width: 500px;
+      font-size: 1rem;
+    }
+    #response {
+      margin-top: 2rem;
+      padding: 1rem;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      text-align: left;
+      white-space: pre-wrap;
+    }
+    #status {
+      color: #555;
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎤 Voice to Gemini Assistant</h1>
+  <p>Click start and speak your interview question (or let your mobile listen to speaker).</p>
+
+  <input type="password" id="apikey" placeholder="Enter Google Gemini API Key" />
+  <button onclick="saveKey()">🔐 Save API Key</button>
+
+  <button onclick="startListening()">🎙️ Start Listening</button>
+  <div id="status">🎙️ Idle</div>
+  <textarea id="transcript" rows="3" placeholder="Transcript will appear here..."></textarea>
+  <button onclick="askGemini()">🤖 Ask Gemini</button>
+
+  <div id="response"></div>
+
+  <script>
+    let GEMINI_API_KEY = localStorage.getItem("gemini_api_key") || "";
+
+    function saveKey() {
+      const key = document.getElementById("apikey").value.trim();
+      if (!key) return alert("Please enter a valid API key");
+      localStorage.setItem("gemini_api_key", key);
+      GEMINI_API_KEY = key;
+      alert("✅ API Key saved locally in your browser.");
+    }
+
+    let recognition;
+    try {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) throw new Error("SpeechRecognition not supported. Use Chrome.");
+
+      recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      recognition.onstart = () => {
+        document.getElementById("status").innerText = "🎙️ Listening...";
+      };
+
+      recognition.onresult = (event) => {
+        const text = event.results[0][0].transcript;
+        document.getElementById("transcript").value = text;
+        document.getElementById("status").innerText = "✅ Captured: " + text;
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech error", event);
+        alert("Speech Recognition Error: " + event.error);
+        document.getElementById("status").innerText = "⚠️ Error: " + event.error;
+      };
+
+      recognition.onend = () => {
+        document.getElementById("status").innerText = "🎙️ Idle";
+      };
+    } catch (err) {
+      alert(err.message);
+      document.getElementById("status").innerText = "❌ Speech recognition not available.";
+    }
+
+    function startListening() {
+      if (!recognition) return;
+      recognition.start();
+    }
+
+    async function askGemini() {
+      if (!GEMINI_API_KEY) return alert("API key not found. Please enter and save your Gemini API key.");
+
+      const question = document.getElementById("transcript").value;
+      if (!question) return alert("No question to ask.");
+
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+
+      const body = {
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: question }]
+          }
+        ]
+      };
+
+      document.getElementById("response").innerText = "Thinking...";
+
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+
+        const data = await res.json();
+        const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "No response.";
+        document.getElementById("response").innerText = reply;
+      } catch (err) {
+        console.error("Gemini error", err);
+        document.getElementById("response").innerText = "❌ Failed to get answer.";
+      }
+    }
+  </script>
+</body>
+</html>
