@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voice-to-GPT Answer Assistant</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f9fafb;
+      margin: 0;
+      padding: 2rem;
+      text-align: center;
+    }
+    textarea, button {
+      margin-top: 1rem;
+      width: 90%;
+      max-width: 500px;
+      font-size: 1rem;
+    }
+    #response {
+      margin-top: 2rem;
+      padding: 1rem;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      text-align: left;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎤 Voice to GPT Answer Assistant</h1>
+  <p>Click start and speak your interview question (or let your mobile listen to speaker).</p>
+
+  <button onclick="startListening()">Start Listening</button>
+  <textarea id="transcript" rows="3" placeholder="Transcript will appear here..."></textarea>
+  <button onclick="askGPT()">Ask GPT</button>
+
+  <div id="response"></div>
+
+  <script>
+    const OPENAI_API_KEY = "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
+"; // Replace with your key
+
+    // 🎤 Speech-to-text
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = 'en-US';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    function startListening() {
+      recognition.start();
+      recognition.onresult = (event) => {
+        document.getElementById("transcript").value = event.results[0][0].transcript;
+      };
+      recognition.onerror = (event) => {
+        alert("Error listening: " + event.error);
+      };
+    }
+
+    // 🤖 Ask ChatGPT
+    async function askGPT() {
+      const question = document.getElementById("transcript").value;
+      if (!question) return alert("No question to ask.");
+
+      const body = {
+        model: "gpt-3.5-turbo",
+        messages: [
+          { role: "system", content: "You are a helpful DevOps interview assistant. Give clear, short answers." },
+          { role: "user", content: question }
+        ]
+      };
+
+      document.getElementById("response").innerText = "Thinking...";
+
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${OPENAI_API_KEY}`
+        },
+        body: JSON.stringify(body)
+      });
+
+      const data = await res.json();
+      document.getElementById("response").innerText = data.choices?.[0]?.message?.content || "No response.";
+    }
+  </script>
+</body>
+</html>
