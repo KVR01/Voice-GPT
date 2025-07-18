@@ -12,7 +12,7 @@
       padding: 2rem;
       text-align: center;
     }
-    textarea, button {
+    textarea, button, input {
       margin-top: 1rem;
       width: 90%;
       max-width: 500px;
@@ -27,40 +27,89 @@
       text-align: left;
       white-space: pre-wrap;
     }
+    #status {
+      color: #555;
+      margin-top: 1rem;
+    }
   </style>
 </head>
 <body>
   <h1>🎤 Voice to GPT Answer Assistant</h1>
   <p>Click start and speak your interview question (or let your mobile listen to speaker).</p>
 
-  <button onclick="startListening()">Start Listening</button>
+  <input type="password" id="apikey" placeholder="Enter OpenAI API Key" />
+  <button onclick="saveKey()">🔐 Save API Key</button>
+
+  <button onclick="startListening()">🎙️ Start Listening</button>
+  <div id="status">🎙️ Idle</div>
   <textarea id="transcript" rows="3" placeholder="Transcript will appear here..."></textarea>
-  <button onclick="askGPT()">Ask GPT</button>
+  <button onclick="askGPT()">🤖 Ask GPT</button>
 
   <div id="response"></div>
 
   <script>
-    const OPENAI_API_KEY = "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
-"; // Replace with your key
+    let OPENAI_API_KEY = localStorage.getItem("gpt_api_key") || "";
 
-    // 🎤 Speech-to-text
-    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-    recognition.lang = 'en-US';
-    recognition.continuous = false;
-    recognition.interimResults = false;
-
-    function startListening() {
-      recognition.start();
-      recognition.onresult = (event) => {
-        document.getElementById("transcript").value = event.results[0][0].transcript;
-      };
-      recognition.onerror = (event) => {
-        alert("Error listening: " + event.error);
-      };
+    function saveKey() {
+      const key = document.getElementById("apikey").value.trim();
+      if (!key) return alert("Please enter a valid API key");
+      localStorage.setItem("gpt_api_key", key);
+      OPENAI_API_KEY = key;
+      alert("✅ API Key saved locally in your browser.");
     }
 
-    // 🤖 Ask ChatGPT
+    let recognition;
+    let isSpeechRecognitionAvailable = false;
+
+    window.addEventListener("DOMContentLoaded", () => {
+      try {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) throw new Error("SpeechRecognition not supported. Use Chrome mobile/desktop.");
+
+        recognition = new SpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.continuous = false;
+        recognition.interimResults = false;
+
+        recognition.onstart = () => {
+          document.getElementById("status").innerText = "🎙️ Listening...";
+        };
+
+        recognition.onresult = (event) => {
+          const text = event.results[0][0].transcript;
+          document.getElementById("transcript").value = text;
+          document.getElementById("status").innerText = "✅ Captured: " + text;
+        };
+
+        recognition.onerror = (event) => {
+          console.error("Speech error", event);
+          alert("Speech Recognition Error: " + event.error);
+          document.getElementById("status").innerText = "⚠️ Error: " + event.error;
+        };
+
+        recognition.onend = () => {
+          document.getElementById("status").innerText = "🎙️ Idle";
+        };
+
+        isSpeechRecognitionAvailable = true;
+      } catch (err) {
+        console.warn(err.message);
+        document.getElementById("status").innerText = "❌ Speech recognition not available.";
+        isSpeechRecognitionAvailable = false;
+      }
+    });
+
+    function startListening() {
+      if (!isSpeechRecognitionAvailable || !recognition) {
+        alert("Speech Recognition not supported in this browser or environment. Try Chrome on Android/PC.");
+        return;
+      }
+      recognition.start();
+    }
+
     async function askGPT() {
+      if (!OPENAI_API_KEY) return alert("API key not found. Please enter and save your OpenAI API key.");
+
       const question = document.getElementById("transcript").value;
       if (!question) return alert("No question to ask.");
 
@@ -74,17 +123,26 @@
 
       document.getElementById("response").innerText = "Thinking...";
 
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${OPENAI_API_KEY}`
-        },
-        body: JSON.stringify(body)
-      });
+      try {
+        const res = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${OPENAI_API_KEY}`
+          },
+          body: JSON.stringify(body)
+        });
 
-      const data = await res.json();
-      document.getElementById("response").innerText = data.choices?.[0]?.message?.content || "No response.";
+        const data = await res.json();
+        if (data.error) {
+          throw new Error(data.error.message);
+        }
+
+        document.getElementById("response").innerText = data.choices?.[0]?.message?.content || "No response.";
+      } catch (err) {
+        console.error("OpenAI error", err);
+        document.getElementById("response").innerText = "❌ Failed to get answer: " + err.message;
+      }
     }
   </script>
 </body>
